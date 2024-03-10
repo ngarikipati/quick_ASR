@@ -1,0 +1,94 @@
+quick ASR workflow -- for a simple amino acid phlogeny and subsequent ancestral sequence reconstruction
+
+--------------------------
+
+Version: 1.0
+Created by: Neerja Garikipati
+Date Created: 15 August 2022
+Date Edited: --
+
+---------------------------
+USEFUL COMMANDS AND SANITY CHECKS
+--------------------------- 
+rsync -av -e "ssh -p #" path\of\file\on\lab\computer path\to\location\on\your\computer ##Pull from your terminal a file from a lab computer (or between lab computers)
+rsync -av -e "ssh -p #" path\of\file\on\your\computer path\to\location\on\lab\computer ##Push from your terminal a local file to a lab computer (or between lab computers)
+
+seqcon #pulls up seqcon help menu (Unique to Theobald Lab at Brandeis)
+ancprobs #pulls up ancprobs help menu (Unique to Theobald Lab at Brandeis)
+---------------------------
+
+STEP 1: generate list of sequences to align
+
+./multi_blastp.sh ##blast each query text file
+##run this script in a directory with ONLY the individual query sequences in FASTA format
+
+./delimfix.sh
+##run this script to fix the delimiters in your fstdump files -- the subsequent scripts will NOT run properly otherwise.
+
+./parse_blastp_tab.py ##generates FASTA file of all the sequences, list of accession numbers for sequences, and a naming key for accession number list
+	## concat_seqdump.fasta: FASTA file of all the sequences
+	## concat_accnum.txt: accession numbers
+	## concat_key.txt: naming key
+
+
+RUN THIS PART IN A FRESH DIRECTORY
+seqcon -E concat_seqdump.fasta ##explode into individual FASTA files
+
+./acckeygen.sh
+## you will need to open this script up and modify it for your unique sequences.
+## NB: this will give a warning saying that the script cannot find acckey.txt -- this means it is working!! The script generates acckey.txt
+
+
+RUN THIS PART IN A FRESH DIRECTORY
+./rename.sh acckey.txt concat_seqdump.fasta #renames protein sequences -- once all the sequences are renamed, open script uncomment the second cat command and comment "#AA rename command"
+	## this generates the file 'renamed_seqs.fasta'
+
+---------------------------
+
+STEP 2: ALIGN RENAMED PROTEIN SEQUENCES
+
+NB: at this step, I always like to check how long my alignment is going to be -- you can do this with the command 'grep ">" [file_to_align] | wc -l'
+
+mafft renamed_seqs.fasta > EVH1_[number_of_sequences]seqs_ALN
+
+to trim sequences based on sequence identity: seqcon -u {#}
+	## I like to trim between 0.90-0.95 sequence identity
+to trim based on sequence length {minlen:maxlen}: seqcon -k {#:#}
+  ## I like to trim ± 10% sequence length on either side of the query sequence length
+
+## NB: after every trim, check to make sure that your query sequences are still in the file (grep 'sequencename.fst' [alignment file]). If not, add them back in (cat 'sequencename.fst' >> alignment_file)
+## realign after every trim and check the length
+
+---------------------------
+
+STEP 3: GENERATE (and refine) TREE 
+
+RUN EVERY TREE YOU GENERATE IN A FRESH DIRECTORY
+
+./iqtree_aaLG.sh [alignment_file]
+
+##you can check the status of your run with the 'top' command. If you feel like there are too many things running on draconis, you can secure copy your alignment and the iqtree script to gryphon and run it from there!! (and then secure-copy back to draconis when the run is done).
+
+##after every tree run, you should refine your tree by removing sequences with branch lengths/bootstraps of >0.5 (this tells you about substitution rate -- a branch length over 1 means that every site in the sequence was substituted)
+	##make a text file of the sequences headers (human-readable labels) you want to remove
+	##copy your alignment file to a new directory and explode it (seqcon -E)
+	./remove.sh [sequences_to_remove.txt]
+		##this generates a file called trimmed.fst
+	##check the length of your trimmed file, and check to make sure your query sequences were not accidentally removed
+	mafft trimmed.fst > EVH1_[number_of_sequences]seqs_ALN
+
+##repeat until you have a tree you are satisfied with
+
+---------------------------
+
+STEP 4: RECONSTRUCT ANCESTORS
+
+##I like to make a fresh directory for every node I reconstruct from
+
+./aa_autogap.sh iqtree.treefile alignment.fst ##generates the gapped ancestral state file to use with ancprobs
+
+ancprobs -n [node #] -p iqtree -f iqtree.state -b binary state
+	## -n: node
+	## -p: program used to make the tree
+	## -f: state file
+	## -b: binary state file
