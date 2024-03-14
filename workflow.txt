@@ -24,6 +24,7 @@ STEP 1: generate list of sequences to align
 
 ./delimfix.sh
 ##run this script to fix the delimiters in your fstdump files -- the subsequent scripts will NOT run properly otherwise.
+##run this from the directory with the fstdump files!
 
 ./parse_blastp_tab.py ##generates FASTA file of all the sequences, list of accession numbers for sequences, and a naming key for accession number list
 	## concat_seqdump.fasta: FASTA file of all the sequences
